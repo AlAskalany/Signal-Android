@@ -1,5 +1,6 @@
 package org.thoughtcrime.securesms.jobmanager;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -14,6 +15,7 @@ import org.thoughtcrime.securesms.logging.Log;
 import org.thoughtcrime.securesms.service.GenericForegroundService;
 
 import java.io.Serializable;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -30,12 +32,11 @@ public abstract class Job extends Worker implements Serializable {
 
   private static final WorkLockManager WORK_LOCK_MANAGER = new WorkLockManager();
 
-  static final String KEY_RETRY_COUNT            = "Job_retry_count";
-  static final String KEY_RETRY_UNTIL            = "Job_retry_until";
-  static final String KEY_SUBMIT_TIME            = "Job_submit_time";
-  static final String KEY_REQUIRES_NETWORK       = "Job_requires_network";
-  static final String KEY_REQUIRES_MASTER_SECRET = "Job_requires_master_secret";
-  static final String KEY_REQUIRES_SQLCIPHER     = "Job_requires_sqlcipher";
+  static final String KEY_RETRY_COUNT        = "Job_retry_count";
+  static final String KEY_RETRY_UNTIL        = "Job_retry_until";
+  static final String KEY_SUBMIT_TIME        = "Job_submit_time";
+  static final String KEY_REQUIRES_NETWORK   = "Job_requires_network";
+  static final String KEY_REQUIRES_SQLCIPHER = "Job_requires_sqlcipher";
 
   private JobParameters parameters;
 
@@ -46,7 +47,10 @@ public abstract class Job extends Worker implements Serializable {
   /**
    * Invoked when a job is first created in our own codebase.
    */
-  protected Job(@Nullable JobParameters parameters) {
+  @SuppressLint("RestrictedApi")
+  protected Job(@NonNull Context context, @Nullable JobParameters parameters) {
+    //noinspection ConstantConditions
+    super(context, new WorkerParameters(null, null, Collections.emptySet(), null, 0, null, null, null));
     this.parameters = parameters;
   }
 
@@ -79,11 +83,11 @@ public abstract class Job extends Worker implements Serializable {
       ((ContextDependent)this).setContext(getApplicationContext());
     }
 
-    initialize(new SafeData(data));
-
     boolean foregroundRunning = false;
 
     try {
+      initialize(new SafeData(data));
+
       if (withinRetryLimits(data)) {
         if (requirementsMet(data)) {
           if (needsForegroundService(data)) {
@@ -120,13 +124,8 @@ public abstract class Job extends Worker implements Serializable {
   }
 
   @Override
-  public void onStopped(boolean cancelled) {
-    if (cancelled) {
-      warn("onStopped() with cancellation signal." + logSuffix());
-      onCanceled();
-    } else {
-      log("onStopped()" + logSuffix());
-    }
+  public void onStopped() {
+    log("onStopped()" + logSuffix());
   }
 
   final void onSubmit(@NonNull Context context, @NonNull UUID id) {
@@ -212,10 +211,6 @@ public abstract class Job extends Worker implements Serializable {
 
   private boolean requirementsMet(@NonNull Data data) {
     boolean met = true;
-
-    if (data.getBoolean(KEY_REQUIRES_MASTER_SECRET, false)) {
-      met &= new MasterSecretRequirement(getApplicationContext()).isPresent();
-    }
 
     if (data.getBoolean(KEY_REQUIRES_SQLCIPHER, false)) {
       met &= new SqlCipherMigrationRequirement(getApplicationContext()).isPresent();

@@ -3,6 +3,9 @@ package org.thoughtcrime.securesms.jobmanager;
 import android.content.Context;
 import android.support.annotation.NonNull;
 
+import org.thoughtcrime.securesms.logging.Log;
+
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -16,6 +19,8 @@ import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 
 public class JobManager {
+
+  private static final String TAG = JobManager.class.getSimpleName();
 
   private static final Constraints NETWORK_CONSTRAINT = new Constraints.Builder()
                                                                        .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -33,7 +38,11 @@ public class JobManager {
 
   public void add(Job job) {
     executor.execute(() -> {
-      workManager.synchronous().pruneWorkSync();
+      try {
+        workManager.pruneWork().getResult().get();
+      } catch (ExecutionException | InterruptedException e) {
+        Log.w(TAG, "Failed to prune work.", e);
+      }
 
       JobParameters jobParameters = job.getJobParameters();
 
@@ -45,7 +54,6 @@ public class JobManager {
                                                    .putLong(Job.KEY_RETRY_UNTIL, jobParameters.getRetryUntil())
                                                    .putLong(Job.KEY_SUBMIT_TIME, System.currentTimeMillis())
                                                    .putBoolean(Job.KEY_REQUIRES_NETWORK, jobParameters.requiresNetwork())
-                                                   .putBoolean(Job.KEY_REQUIRES_MASTER_SECRET, jobParameters.requiresMasterSecret())
                                                    .putBoolean(Job.KEY_REQUIRES_SQLCIPHER, jobParameters.requiresSqlCipher());
       Data data = job.serialize(dataBuilder);
 

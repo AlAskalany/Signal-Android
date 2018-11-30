@@ -40,6 +40,7 @@ public class ReadReceiptsIntroFragment extends Fragment {
                         .getJobManager()
                         .add(new MultiDeviceConfigurationUpdateJob(getContext(),
                                                                    isChecked,
+                                                                   TextSecurePreferences.isTypingIndicatorsEnabled(requireContext()),
                                                                    TextSecurePreferences.isShowUnidentifiedDeliveryIndicatorsEnabled(getContext())));
     });
 

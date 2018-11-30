@@ -23,10 +23,16 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 
-public abstract class SendJob extends MasterSecretJob {
+import androidx.work.WorkerParameters;
+
+public abstract class SendJob extends ContextJob {
 
   @SuppressWarnings("unused")
   private final static String TAG = SendJob.class.getSimpleName();
+
+  protected SendJob(@NonNull Context context, @NonNull WorkerParameters workerParameters) {
+    super(context, workerParameters);
+  }
 
   public SendJob(Context context, JobParameters parameters) {
     super(context, parameters);
@@ -38,7 +44,7 @@ public abstract class SendJob extends MasterSecretJob {
   }
 
   @Override
-  public final void onRun(MasterSecret masterSecret) throws Exception {
+  public final void onRun() throws Exception {
     if (Util.getDaysTillBuildExpiry() <= 0) {
       throw new TextSecureExpiredException(String.format("TextSecure expired (build %d, now %d)",
                                                          BuildConfig.BUILD_TIMESTAMP,
@@ -46,11 +52,11 @@ public abstract class SendJob extends MasterSecretJob {
     }
 
     Log.i(TAG, "Starting message send attempt");
-    onSend(masterSecret);
+    onSend();
     Log.i(TAG, "Message send completed");
   }
 
-  protected abstract void onSend(MasterSecret masterSecret) throws Exception;
+  protected abstract void onSend() throws Exception;
 
   protected void markAttachmentsUploaded(long messageId, @NonNull List<Attachment> attachments) {
     AttachmentDatabase database = DatabaseFactory.getAttachmentDatabase(context);

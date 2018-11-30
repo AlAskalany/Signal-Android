@@ -34,6 +34,7 @@ import java.io.IOException;
 import javax.inject.Inject;
 
 import androidx.work.Data;
+import androidx.work.WorkerParameters;
 
 public class PushTextSendJob extends PushSendJob implements InjectableType {
 
@@ -47,8 +48,8 @@ public class PushTextSendJob extends PushSendJob implements InjectableType {
 
   private long messageId;
 
-  public PushTextSendJob() {
-    super(null, null);
+  public PushTextSendJob(@NonNull Context context, @NonNull WorkerParameters workerParameters) {
+    super(context, workerParameters);
   }
 
   public PushTextSendJob(Context context, long messageId, Address destination) {
@@ -77,6 +78,11 @@ public class PushTextSendJob extends PushSendJob implements InjectableType {
     ExpiringMessageManager expirationManager = ApplicationContext.getInstance(context).getExpiringMessageManager();
     SmsDatabase            database          = DatabaseFactory.getSmsDatabase(context);
     SmsMessageRecord       record            = database.getMessage(messageId);
+
+    if (!record.isPending() && !record.isFailed()) {
+      Log.w(TAG, "Message " + messageId + " was already sent. Ignoring.");
+      return;
+    }
 
     try {
       Log.i(TAG, "Sending message: " + messageId);
@@ -124,7 +130,7 @@ public class PushTextSendJob extends PushSendJob implements InjectableType {
   }
 
   @Override
-  public boolean onShouldRetryThrowable(Exception exception) {
+  public boolean onShouldRetry(Exception exception) {
     if (exception instanceof RetryLaterException) return true;
 
     return false;
@@ -146,6 +152,8 @@ public class PushTextSendJob extends PushSendJob implements InjectableType {
       throws UntrustedIdentityException, InsecureFallbackApprovalException, RetryLaterException
   {
     try {
+      rotateSenderCertificateIfNecessary();
+
       SignalServiceAddress             address            = getPushAddress(message.getIndividualRecipient().getAddress());
       Optional<byte[]>                 profileKey         = getProfileKey(message.getIndividualRecipient());
       Optional<UnidentifiedAccessPair> unidentifiedAccess = UnidentifiedAccessUtil.getAccessFor(context, message.getIndividualRecipient());

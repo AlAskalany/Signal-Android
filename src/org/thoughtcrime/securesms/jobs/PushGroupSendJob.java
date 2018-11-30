@@ -45,7 +45,6 @@ import org.whispersystems.signalservice.api.util.InvalidNumberException;
 import org.whispersystems.signalservice.internal.push.SignalServiceProtos.GroupContext;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -54,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 
 import androidx.work.Data;
+import androidx.work.WorkerParameters;
 
 public class PushGroupSendJob extends PushSendJob implements InjectableType {
 
@@ -70,14 +70,13 @@ public class PushGroupSendJob extends PushSendJob implements InjectableType {
   private long   filterRecipientId; // Deprecated
   private String filterAddress;
 
-  public PushGroupSendJob() {
-    super(null, null);
+  public PushGroupSendJob(@NonNull Context context, @NonNull WorkerParameters workerParameters) {
+    super(context, workerParameters);
   }
 
   public PushGroupSendJob(Context context, long messageId, @NonNull Address destination, @Nullable Address filterAddress) {
     super(context, JobParameters.newBuilder()
                                 .withGroupId(destination.toGroupString())
-                                .withMasterSecretRequirement()
                                 .withNetworkRequirement()
                                 .withRetryDuration(TimeUnit.DAYS.toMillis(1))
                                 .create());
@@ -113,6 +112,11 @@ public class PushGroupSendJob extends PushSendJob implements InjectableType {
     OutgoingMediaMessage      message                    = database.getOutgoingMessage(messageId);
     List<NetworkFailure>      existingNetworkFailures    = message.getNetworkFailures();
     List<IdentityKeyMismatch> existingIdentityMismatches = message.getIdentityKeyMismatches();
+
+    if (database.isSent(messageId)) {
+      Log.w(TAG, "Message " + messageId + " was already sent. Ignoring.");
+      return;
+    }
 
     try {
       Log.i(TAG, "Sending message: " + messageId);
@@ -185,7 +189,7 @@ public class PushGroupSendJob extends PushSendJob implements InjectableType {
   }
 
   @Override
-  public boolean onShouldRetryThrowable(Exception exception) {
+  public boolean onShouldRetry(Exception exception) {
     if (exception instanceof IOException)         return true;
     if (exception instanceof RetryLaterException) return true;
     return false;
@@ -200,6 +204,8 @@ public class PushGroupSendJob extends PushSendJob implements InjectableType {
       throws IOException, RecipientFormattingException, InvalidNumberException,
              UndeliverableMessageException, UntrustedIdentityException
   {
+    rotateSenderCertificateIfNecessary();
+
     String                        groupId           = message.getRecipient().getAddress().toGroupString();
     Optional<byte[]>              profileKey        = getProfileKey(message.getRecipient());
     MediaConstraints              mediaConstraints  = MediaConstraints.getPushMediaConstraints();

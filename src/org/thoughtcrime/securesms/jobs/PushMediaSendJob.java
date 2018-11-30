@@ -39,6 +39,7 @@ import java.util.List;
 import javax.inject.Inject;
 
 import androidx.work.Data;
+import androidx.work.WorkerParameters;
 
 public class PushMediaSendJob extends PushSendJob implements InjectableType {
 
@@ -52,8 +53,8 @@ public class PushMediaSendJob extends PushSendJob implements InjectableType {
 
   private long messageId;
 
-  public PushMediaSendJob() {
-    super(null, null);
+  public PushMediaSendJob(@NonNull Context context, @NonNull WorkerParameters workerParameters) {
+    super(context, workerParameters);
   }
 
   public PushMediaSendJob(Context context, long messageId, Address destination) {
@@ -84,6 +85,11 @@ public class PushMediaSendJob extends PushSendJob implements InjectableType {
     ExpiringMessageManager expirationManager = ApplicationContext.getInstance(context).getExpiringMessageManager();
     MmsDatabase            database          = DatabaseFactory.getMmsDatabase(context);
     OutgoingMediaMessage   message           = database.getOutgoingMessage(messageId);
+
+    if (database.isSent(messageId)) {
+      Log.w(TAG, "Message " + messageId + " was already sent. Ignoring.");
+      return;
+    }
 
     try {
       Log.i(TAG, "Sending message: " + messageId);
@@ -131,10 +137,8 @@ public class PushMediaSendJob extends PushSendJob implements InjectableType {
   }
 
   @Override
-  public boolean onShouldRetryThrowable(Exception exception) {
-    if (exception instanceof RequirementNotMetException) return true;
-    if (exception instanceof RetryLaterException)        return true;
-
+  public boolean onShouldRetry(Exception exception) {
+    if (exception instanceof RetryLaterException) return true;
     return false;
   }
 
@@ -153,6 +157,8 @@ public class PushMediaSendJob extends PushSendJob implements InjectableType {
     }
 
     try {
+      rotateSenderCertificateIfNecessary();
+
       SignalServiceAddress                     address           = getPushAddress(message.getRecipient().getAddress());
       MediaConstraints                         mediaConstraints  = MediaConstraints.getPushMediaConstraints();
       List<Attachment>                         scaledAttachments = scaleAndStripExifFromAttachments(mediaConstraints, message.getAttachments());
